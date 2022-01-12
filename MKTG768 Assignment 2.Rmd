@@ -1,0 +1,680 @@
+---
+title: "MKTG 768 Assignment 2"
+author: "Jackie MacDonald"
+date: "4/18/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+# Text Mining & Sentiment Analysis
+
+Text mining and sentiment analysis allows us to have a greater insight on how words are viewed by others as well as what those words mean independently as well as in the context of sentences, paragraphs and among numerous documents. Currently with the expansion on news media outlets using the internet and social media websites it's hard to determine what is real or fake news. Scraping Google news headlines for four days and being provided a csv file of a mixture of fake and news headlines we set out to look at the sentiment analysis of words used in our headlines as well as using text mining techniques to determine what might be fake news or reals news determined by the words used in news headlines. Below, we use text mining and sentiment analysis to explore our headlines and find things that might help others to identify fake news from real news when glancing at news headlines on the internet.   
+
+## [1] Load Libraries & Packages
+
+```{r warning=FALSE, message=FALSE}
+pacman::p_load(tidyr, dplyr, stringr, data.table, sentimentr, ggplot2, text2vec, tm, ggrepel, lattice,udpipe,data.table)
+pacman::p_load(tm, Rtsne, tibble, tidytext, scales, topicmodels, tm, SnowballC,tidyverse,rvest)
+
+library(tidyverse) 
+library(tidytext) 
+library(topicmodels) 
+library(tm) 
+library(SnowballC) 
+library(stringr)
+library(wordcloud2)
+library(ggraph)
+library(igraph)
+
+load("C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/Udpipemodels.RData")#loads ud models for later analysis
+```
+
+First we load our libraries and packages. Our libraries consist of tidyvers, to organize workflow and for all text work, tidytext because it contains the NLP methods we need, topicmodels for LDA topic modeling,tm for general text mining functions/DTM work,SnowballC for stemming when needed, stringr for cleaning, and wordcloud2 and ggraph for creating visualizations. Using pacman "p_load" we are able to check and see if a package is installed, and if not, it attempts to install the package from CRAN. We load Ud pipe models for the english language because it is a natural language processing toolkit that provides language-agnostic 'tokenization', 'parts of speech tagging', 'lemmatization' and 'dependency parsing' of raw text. Next to text parsing, the package also allows you to train annotation models based on data. Using UDPipe we'll load ud models for later analysis further in our paper. 
+
+## [2] Data Scraping 
+
+```{r warning=FALSE, message=FALSE}
+google <-read_html("https://news.google.com/")
+
+#headline_all <-google %>% html_nodes("article") %>% html_text("span") %>% str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
+#headline_all <-sapply(headline_all, function(x) x[1]) 
+
+#google_headlines<-data.frame(headlines= headline_all, stringsAsFactors = F)
+#str(google_headlines)
+#fwrite(google_headlines,"C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/google_news_headlines.csv")
+
+#headline_all_day2 <-google %>% html_nodes("article") %>% html_text("span") %>% str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
+#headline_all_day2 <-sapply(headline_all_day2, function(x) x[1]) 
+
+#google_headlines_day2<-data.frame(headlines= headline_all_day2, stringsAsFactors = F)
+#str(google_headlines_day2)
+#fwrite(google_headlines_day2, "C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/google_news_headlines_day2.csv")
+
+#headline_all_day3 <-google %>% html_nodes("article") %>% html_text("span") %>% str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
+#headline_all_day3 <-sapply(headline_all_day3, function(x) x[1]) 
+
+#google_headlines_day3<-data.frame(headlines= headline_all_day3, stringsAsFactors = F)
+#str(google_headlines_day3)
+#fwrite(google_headlines_day3,  "C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/google_news_headlines_day3.csv")
+
+
+#headline_all_day4 <-google %>% html_nodes("article") %>% html_text("span") %>% str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
+#headline_all_day4 <-sapply(headline_all_day4, function(x) x[1]) 
+
+#google_headlines_day4<-data.frame(headlines= headline_all_day4, stringsAsFactors = F)
+#str(google_headlines_day4)
+#fwrite(google_headlines_day4,  "C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/google_news_headlines_day4.csv")
+
+
+#my_folder<-"C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/"
+#list.files(my_folder)
+#grep("google",list.files(my_folder), value=T)
+
+#google_headlines<-rbindlist(lapply(paste0(my_folder,grep("google",list.files(my_folder), value=T)),function (i) fread(i, fill = T)))[,id:=1:.N]
+#fwrite(google_headlines,"C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/google_news_final.csv")
+```
+
+Extracting Google's headline news for at least four days, with a minimum of 12 hour intervals, we are able to build our own dataset of real news. We do this in 12 hour intervals because if you try to scrape your data all in one day you will get the same headlines repeating, thereby resulting in a bad dataset. This is with the assumption that Google news is valid news coverage we take our scraped data and write each day into a csv file that we rbind and merge together into one final csv file. In our final csv file we can see that we obtained 216 headlines throughout our 4 days of data scraping that we are now able to use for further analysis using the assumption that Google news is real news coverage. After writing our data scraping code we comment it out in order to prevent us from accidentally rewriting our csv files.   
+
+## [3] Loading Our Data
+
+```{r warning=FALSE, message=FALSE}
+scrape_headline<- fread("C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/google_news_final.csv")
+prov_headline<- fread("C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/News Headlines Dataset Real Fake.csv", select=c(1:3),header=T)[1:10689][,id:=1:.N]
+
+head(scrape_headline)
+head(prov_headline)
+
+only_fake<-prov_headline[type=="bs"]
+only_real<-prov_headline[type!="bs"]
+
+head(only_fake)
+head(only_real)
+```
+
+Using our csv file of our scraped data from Google news we load it into our program, along with the csv file of the provided headlines from around the world of fake and real news. We noticed that at the end of our provided csv file that there were a few rows with no information in them so we dropped them from our data table. Then, we divded our provided headlines csv file into two seperate data tables. One data table containing only headlines that were listed as "real" and another data table that consist of headlines that were listed as "bs"/fake. Now we have 3 seperate data tables, one that consists of 4 days worth of google scraped headlines, one that consists of only real headlines from our provided data, and one that consists of only fake headlines from our provided data.  
+
+## [4] Co-occurence And Word Level Sentiment Analysis
+### [4.1] Defining Our Lexicon 
+
+```{r warning=FALSE, message=FALSE}
+headline_lexicon <-data.table(lexicon::hash_sentiment_jockers_rinker)
+#nrow(headline_lexicon)
+
+sent_df_google<-sentiment_by(get_sentences(scrape_headline),by = c('id'),polarity_dt = headline_lexicon)
+sent_df_only_fake<-sentiment_by(get_sentences(only_fake),by = c('id','language','type'),polarity_dt = headline_lexicon)
+sent_df_only_real<-sentiment_by(get_sentences(only_real),by = c('id','language','type'),polarity_dt = headline_lexicon)
+
+head(sent_df_google)
+head(sent_df_only_fake)
+head(sent_df_only_real)
+```
+
+First we load in our hash_sentiment_jockers_rinker lexicon. We'll be using a lexicon-based approach which involves calculating orientation for a document from the semantic orientation of words or phrases in the document. A lexicon is simply a built up vocabulary from a sample data set. This particular lexicon is a data.table dataset containing a combined and augmented version of Jockers (2017) & Rinker's augmented Hu & Liu (2004) positive/negative word list as sentiment lookup values. Meaning that this sample data set has 11,710 words that have sentiment values associated with each word in the lexicon. After we load in our lexicon we then use the get_sentences function to get sentences from a character vector (our news headlines) and get the average sentiment and standard deviation of the sentences in each of our headlines. Word sentiment indicates how positively or negatively a word or document is. The lower a sentiment score the more negative the word is, the higher the sentiment score the more positive a word is. For some headlines our standard deviation has an NA value due to the headline only containing one sentence. You can't calculate standard deviation with just one variable (sentence), you need at least two. We want to note that this function isn't perfect, something it will take abrevations and think that the headline is broken up into two headlines when it is really only one. Like our 7th headline in our google datable where "VA." is considered as a period isntead of an abbreviation for the state of Virgina. In the tables above we can see the average sentiment score of the news headlines and their standard deviations, each news headline is represented by their headline ID number. 
+
+### [4.2] Global Vectors for Word Representation (GloVE)
+
+```{r warning=FALSE, message=FALSE}
+tokens_google <-space_tokenizer(removePunctuation(tolower(scrape_headline$headlines)))
+tokens_fake<-space_tokenizer(removePunctuation(tolower(only_fake$title)))
+tokens_real<-space_tokenizer(removePunctuation(tolower(only_real$title)))
+
+head(tokens_google)
+```
+
+GloVe is an unsupervised learning algorithm for obtaining vector representations for words. Training is performed on aggregated global word-word co-occurrence statistics from a corpus, or a collection of written texts especially the entire works of a particular author or a body of work on a particular subject, and the resulting representations showcase interesting linear substructures of the word vector space. First, we calculate a contextual representation of a word in a vector form. The rule is that similar words will have vectors that are close to each other, while words that are different will be much further away. Then we'll use an unsupervised learning on n-gram creating dimensionality reduction. Converting our headlines into tokens we remove any punctuation that is in our headlines and make all of our words lower case. "Tokens" are usually individual words (at least in languages like English) and "tokenization" is taking a text or set of text and breaking it up into its individual words. We then create lists of lists of our headlines split into indivdiaul words that we tokenize. We do this for our data table of our scraped data from google News, and our data tables of our provided headlines real and fake. As you can see above we have a list of words for each headline represented by their headline ID number.  
+
+### [4.3] Create vocabulary for GloVE
+
+```{r warning=FALSE, message=FALSE}
+#Create vocabulary. Terms will be unigrams (simple words).
+it_google<-itoken(tokens_google, progressbar = FALSE)
+vocab_google <-create_vocabulary(it_google)
+
+it_fake<-itoken(tokens_fake, progressbar = FALSE)
+vocab_fake<-create_vocabulary(it_fake)
+
+it_real<-itoken(tokens_real, progressbar = FALSE)
+vocab_real<-create_vocabulary(it_real)
+
+head(vocab_google)
+head(vocab_fake)
+head(vocab_real)
+```
+
+We create a vocabulary of our tokenized words for our model to later reference. Here we take our lists of lists of words from each of our headlines that we created in our step above and break them up further into unigrams. Unigrams are single individual words.  Our vocabulary data frame has each unigram listed under the "term" column along with their "term count" and "doc_count." Our term count represents how many times the term appears across all the headlines and document count represents the number of headlines that contain the term.  
+
+### [4.4] Prune, Filter, And Term-co-occurence matrix construction  For GloVE
+
+```{r warning=FALSE, message=FALSE}
+vocab_google <-prune_vocabulary(vocab_google, term_count_min = 3L)
+vocab_fake <-prune_vocabulary(vocab_fake, term_count_min = 3L)
+vocab_real <-prune_vocabulary(vocab_real, term_count_min = 3L)
+
+vectorizer_google <-vocab_vectorizer(vocab_google)
+vectorizer_fake <-vocab_vectorizer(vocab_fake)
+vectorizer_real <-vocab_vectorizer(vocab_real)
+
+tcm_google <-create_tcm(it_google, vectorizer_google, skip_grams_window = 5L)
+tcm_fake <-create_tcm(it_fake, vectorizer_fake, skip_grams_window = 5L)
+tcm_real <-create_tcm(it_real, vectorizer_real, skip_grams_window = 5L)
+```
+
+Above, we prune (remove) words that appear less than 3 times in each of our vocabulary data frames. We then use our filtered vocabulary and map our words to indices. Then using a skip gram window of 5 for context words.Skip-gram is used to predict the context word for a given target word. The target word is input while context words are output. Meaning we're setting a limit of 5 words for our context words that are highly related to our target word. We then construct a term-co-occurrence matrix(TCM) to use for GloVe. Our matrix represents how often word i appears in context of word.
+
+### [4.5] Fit The Model For GloVE
+
+```{r warning=FALSE, results = "hide" , message=FALSE}
+
+glove_google<- GloVe$new(rank = 100, x_max = 5)
+glove_google$fit_transform(tcm_google, n_iter = 20)
+
+glove_fake<- GloVe$new(rank = 100, x_max = 5)
+glove_fake$fit_transform(tcm_fake, n_iter = 20)
+
+glove_real<- GloVe$new(rank = 100, x_max = 5)
+glove_real$fit_transform(tcm_real, n_iter = 20)
+```
+
+We fit each of our models for GloVE. Model fitting is a measure of how well a machine learning model, such as GloVe, generalizes to similar data to that on which it was trained on such as our headlines. Setting the x_max to 5 we are telling it that maximum number of co-occurrences to use in the weighting function is 5 and setting the n_iter to 20 we are telling it the number of SGD iterations to 20.
+
+### [4.6] Get Processed Word Vectors For GloVE
+
+```{r warning=FALSE, message=FALSE}
+word_vectors_google <- glove_google$components
+word_vectors_fake <- glove_fake$components
+word_vectors_real <- glove_real$components
+```
+
+We use our fit models and get the processed word vectors. Now we can check which words have contextual similarity.
+
+### [4.7] Check Which Words Have Contextual Similarity
+
+```{r warning=FALSE, message=FALSE}
+activism<-word_vectors_fake[, "activism", drop = F]
+cos_sim = sim2(x = t(word_vectors_fake), y = t(activism), method = "cosine", norm = "l2")
+head(sort(cos_sim[,1], decreasing = TRUE), 20)
+```
+
+Looking at the words in "word_vectors_fake" we see that activism is a word in there. We take the word activism and use cosine similarity between word vectors to tell us how similar they are to the word "activism." We see that closest words to activism are equation, yield, sued etc. We could possibly further explore this if we wanted to by choosing different words in our word_vectors and looking at which words are similiar to our different target words.
+
+### [4.8] Getting Rid Of Stop Words & Training Data For TSNE
+
+```{r warning=FALSE, message=FALSE}
+keep_words_google<-setdiff(colnames(word_vectors_google), stopwords())
+word_vec_google<-word_vectors_google[, keep_words_google]
+
+keep_words_fake<-setdiff(colnames(word_vectors_fake), stopwords())
+word_vec_fake<-word_vectors_fake[, keep_words_fake]
+
+keep_words_real<-setdiff(colnames(word_vectors_real), stopwords())
+word_vec_real<-word_vectors_real[, keep_words_real]
+
+#prepare data frame to train 
+train_df_google<-rownames_to_column(data.frame(t(word_vec_google)),"word")
+train_df_fake<-rownames_to_column(data.frame(t(word_vec_fake)),"word")
+train_df_real<-rownames_to_column(data.frame(t(word_vec_real)),"word")
+
+#train tsne for visualization
+tsne_google <-Rtsne(train_df_google[,-1], dims = 2, perplexity = 50, verbose=TRUE, max_iter = 500)
+tsne_fake <-Rtsne(train_df_fake[,-1], dims = 2, perplexity = 50, verbose=TRUE, max_iter = 500)
+tsne_real <-Rtsne(train_df_real[,-1], dims = 2, perplexity = 50, verbose=TRUE, max_iter = 500)
+```
+
+Creating a vector of words to keep we remove stop words from out fit models before applying TSNE. Stop words are words like "the" and "and" that we don't want in our models because they don't add value to our data and could potentially skew our final results. We then take the words we want to keep and put them in a vector, prepare our data frames to train, and train them using TSNE for data visualization later on. 
+
+### [4.9] Implmenting t-SNE to visualize Headlines by similarity of words
+
+```{r warning=FALSE, message=FALSE}
+colors_fake = rainbow(length(unique(train_df_fake$word)))
+names(colors_fake) = unique(train_df_fake$word)
+plot_df_fake<- data.table(vocab_fake)[data.table(tsne_fake$Y)[,`:=`(term= train_df_fake$word,
+                                           col = colors_fake[train_df_fake$word])],on="term"][doc_count>=50]#
+
+ggplot(plot_df_fake, aes(V1, V2)) +
+  geom_text(aes(V1, V2, label = term, color = col), size = 3) +
+  xlab("") +
+  ylab("") +
+  theme(legend.position = "none")
+
+colors_real = rainbow(length(unique(train_df_real$word)))
+names(colors_real) = unique(train_df_real$word)
+plot_df_real<- data.table(vocab_real)[data.table(tsne_real$Y)[,`:=`(term= train_df_real$word,
+                                                                    col = colors_real[train_df_real$word])],on="term"][doc_count>=10]#
+
+ggplot(plot_df_real, aes(V1, V2)) +
+  geom_text(aes(V1, V2, label = term, color = col), size = 3) +
+  xlab("") +
+  ylab("") +
+  theme(legend.position = "none")
+
+colors_google = rainbow(length(unique(train_df_google$word)))
+names(colors_real) = unique(train_df_google$word)
+plot_df_google<- data.table(vocab_google)[data.table(tsne_google$Y)[,`:=`(term= train_df_google$word,
+                                                                    col = colors_real[train_df_google$word])],on="term"][doc_count>=5]#
+
+ggplot(plot_df_google, aes(V1, V2)) +
+  geom_text(aes(V1, V2, label = term, color = col), size = 3) +
+  xlab("") +
+  ylab("") +
+  theme(legend.position = "none")
+```
+
+Creating a plot using TSNE we produce the graphs above. T-distributed stochastic neighbor embedding (t-SNE) is a statistical method for visualizing high-dimensional data by giving each datapoint a location in a two or three-dimensional map.The distance between two words roughly describes the similarity between each word. TSNE also create naturally forming clusters of words. Meaning similiar words appear closer to each other while words that aren't similar to each other appear far away. In our plot for fake news we can see that the words "Clintons" "rally" "eastern" and "case" appear in a cluster together meaning that they are similiar to each other in context. So our fake news headlines might be telling us that something may be going on with Hillary Clinton and rallying for a case in the east. But since this is fake news we can't believe it necessarily. In our plot for real news we can see that the words "Hillary" and "state" appear in a cluster together meaning that they are similar to each other in context. So this indicates that something is going on with Hillary Clinton and a particular state. Since this is real news we can infer that this may be true.In our plot for google news we can see that the words "shooting" "wright" and "protests" appear in a cluster together meaning that they are similar to each other in context. So this indicates that something is going on with the Floyd Wright shooting and potentially protests involving the case. Since we are considering google news to be real current news we can infer that this may be true. These plots are helping to show us the clustering of words together, demonstrating how words are associated with one another.
+
+### [4.10] calculate word-level sentiment
+
+```{r warning=FALSE, message=FALSE}
+word_sent_fake<- unnest_tokens(sent_df_only_fake[only_fake,on="id"][,.(id,title,ave_sentiment)],word,title)
+word_sent_fake<-word_sent_fake[,list(count=.N,
+                     avg_sentiment = mean(ave_sentiment),
+                     sum_sentiment = sum(ave_sentiment),
+                     sd_sentiment = sd(ave_sentiment)),by=.(word)][!(word%in%stop_words$word)][,setnames(.SD,"word","term")]
+
+word_sent_real<- unnest_tokens(sent_df_only_real[only_real,on="id"][,.(id,title,ave_sentiment)],word,title)
+word_sent_real<-word_sent_real[,list(count=.N,
+                                     avg_sentiment = mean(ave_sentiment),
+                                     sum_sentiment = sum(ave_sentiment),
+                                     sd_sentiment = sd(ave_sentiment)),by=.(word)][!(word%in%stop_words$word)][,setnames(.SD,"word","term")]
+
+word_sent_google<- unnest_tokens(sent_df_google[scrape_headline,on="id"][,.(id,headlines,ave_sentiment)],word,headlines)
+word_sent_google<-word_sent_google[,list(count=.N,
+                                     avg_sentiment = mean(ave_sentiment),
+                                     sum_sentiment = sum(ave_sentiment),
+                                     sd_sentiment = sd(ave_sentiment)),by=.(word)][!(word%in%stop_words$word)][,setnames(.SD,"word","term")]
+
+head(word_sent_fake)
+head(word_sent_real)
+head(word_sent_google)
+```
+
+Above we calculate our words level sentiment and overlay these on our TSNE models. In our data tables above we can see the words/term, word count, average sentiment for each word, sum sentiment for each word, and the standard deviation sentiment for each indivudal words in each of our data tables for our provided real/fake news and our google headline news.
+
+### [4.11] Filter Words
+
+```{r warning=FALSE, message=FALSE}
+pd_sent_fake<-word_sent_fake[plot_df_fake,on=.(term)][,na.omit(.SD)][count>=5]
+pd_sent_real<-word_sent_real[plot_df_real,on=.(term)][,na.omit(.SD)][count>=5]
+pd_sent_google<-word_sent_google[plot_df_google,on=.(term)][,na.omit(.SD)][count>=5]
+```
+
+Taking our newly created data tables we filter our words so it only includes words that appear at least 5 times.
+
+### [4.11] Plot 2-dimensional t-SNE Mapping of Headlines
+
+```{r warning=FALSE, message=FALSE}
+ggplot(pd_sent_fake, aes(V1, V2)) +
+  geom_point(aes(V1, V2, size = count, alpha = .1, color = avg_sentiment)) +
+  geom_text(aes(V1, V2, label = term), size = 2) +
+  scale_colour_gradient2(low = muted("red"), mid = "white",
+                         high = muted("blue"), midpoint = 0) +
+  scale_size(range = c(5, 20)) +
+  xlab("") + ylab("") +
+  ggtitle("2-dimensional t-SNE Mapping of Fake News") +
+  guides(color = guide_legend(title="Avg. Sentiment"), size = guide_legend(title = "Frequency"), alpha = NULL) +
+  scale_alpha(range = c(1, 1), guide = "none")
+
+ggplot(pd_sent_real, aes(V1, V2)) +
+  geom_point(aes(V1, V2, size = count, alpha = .1, color = avg_sentiment)) +
+  geom_text(aes(V1, V2, label = term), size = 2) +
+  scale_colour_gradient2(low = muted("red"), mid = "white",
+                         high = muted("blue"), midpoint = 0) +
+  scale_size(range = c(5, 20)) +
+  xlab("") + ylab("") +
+  ggtitle("2-dimensional t-SNE Mapping of Real News") +
+  guides(color = guide_legend(title="Avg. Sentiment"), size = guide_legend(title = "Frequency"), alpha = NULL) +
+  scale_alpha(range = c(1, 1), guide = "none")
+
+ggplot(pd_sent_google, aes(V1, V2)) +
+  geom_point(aes(V1, V2, size = count, alpha = .1, color = avg_sentiment)) +
+  geom_text(aes(V1, V2, label = term), size = 2) +
+  scale_colour_gradient2(low = muted("red"), mid = "white",
+                         high = muted("blue"), midpoint = 0) +
+  scale_size(range = c(5, 20)) +
+  xlab("") + ylab("") +
+  ggtitle("2-dimensional t-SNE Mapping of Google News") +
+  guides(color = guide_legend(title="Avg. Sentiment"), size = guide_legend(title = "Frequency"), alpha = NULL) +
+  scale_alpha(range = c(1, 1), guide = "none")
+```
+
+Going a step further we plot a 2 dimensional TSNE mapping of each of our news data tables. Now we can not only see words that appear in clusters indicating their similarity to one another, but now we can also see the frequency the word is used and the sentiment score. The closer a word is to red the lower the sentiment is, meaning people view the word negatively, the closer the word is to purple the higher the sentiment score is meaning the more positively people view the word. Also, the bigger the circle is around the word the more frequently it shows up in our headlines. In our fake news plot we see the cluster of words "war" "fraud" and "investigation." War and fraud are close to red meaning people negatively view those words and investigation is white meaning people are neutral about that word. The words are also in smaller circles meaning they are used around 300 times in our fake news headlines. All of this indicate that even those these topics are not as frequently talked about as others and people negatively view whatever is going on with war, fraud, and the investigation going on with it.In our real news plot we see the cluster of words "trump" "supporters" "investigation" "law" and "Clinton." Trump, Clinton, and law are close to red meaning people negatively view those words and investigation is white meaning people are neutral about that word. The words are also in bigger circles meaning they are used around 200 times in our real news headlines. All of this indicate that even those these topics are frequently talked about as others and people negatively view whatever is going on with Trump, Clinton, the law, and the investigation going on with it.In our google news plot we see the cluster of words "shooting" "wright" "defense" and "police." All of these words are close to red meaning people negatively view those words. The words are also in bigger circles meaning they are used around 25 times in our google news headlines. All of this indicate that even those these topics are frequently talked about as others and people negatively view whatever is going on with the Floyd Wright shooting and the defense of the police. This TSNE maps give us an insight to what words people are associating with target words, how frequently they are being used, and what the average sentiment of these cluster of words are.
+
+## [5] Text Mining Headlines Using WordCloud
+
+```{r warning=FALSE, message=FALSE}
+google_word_counts <- pd_sent_google[count>=8]
+wordcloud2(google_word_counts, size = .5) #term count greater than or equal to mean of counts 
+```
+```{r warning=FALSE, message=FALSE}
+real_word_counts <- pd_sent_real[count>=23]
+wordcloud2(real_word_counts, size = .5) #term count greater than or equal to mean of counts 
+```
+
+```{r warning=FALSE, message=FALSE}
+google_word_counts <- pd_sent_google[count>=8]
+wordcloud2(google_word_counts, size = .5) #term count greater than or equal to mean of counts 
+```
+
+Using text mining techniques we create 3 wordclouds from our headlines of fake news, real news, and google news. We reuse our filtered words from step 4.11 that do not include stop words. Wordclouds show the most frequently used words in a data set. The larger the word is the more frequently the word is used. Above, I put the words in my wordcloud that had a term count greater than or equal to their mean of counts. In our first wordcloud for our fake news headlines we see that the words trump, hillary, and clinton are used frequently along with the word election. This may indicate that a lot of our fake news headlines consist of trump and hillary and their running for the 2016 election that had past. Our real news wordcloud has the same words frequently used meaning that our fake and real news headlines might be similar in referring to the election.Our google news headlines shows the more recent news is reporting on the BLM movement and police shootings with words like "police" shooting" and Officer" in big letters. These word clouds give us an  insight to whats frequently being talked about overall in each data set of headlines.  
+
+## [6] TEXT MINING PARTS OF SPEECH AND KEYWORDS
+### [6.1] Using Udpipe To Annotate The Text In The Headlines
+
+```{r warning=FALSE, message=FALSE}
+udmodel_english <- udpipe_load_model(file = "C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/english-ewt-ud-2.5-191206.udpipe")
+
+
+#s_fake <- udpipe_annotate(udmodel_english, only_fake$title)
+x_fake <- data.table(data.frame(s_fake))
+
+#s_real <- udpipe_annotate(udmodel_english, only_real$title)
+x_real <- data.table(data.frame(s_real))
+
+#s_google <- udpipe_annotate(udmodel_english, scrape_headline$headlines)
+x_google <- data.table(data.frame(s_google))
+
+#save(s_fake,s_real,s_google, file="C:/Users/15852/OneDrive/Desktop/Marketing Analytics/Assignment/Assignment 2/Udpipemodels.RData")
+```
+
+Now we're going to try and explore patterns in text using the UDPIPE models and use RAKE for unsupervised analysis of text data. Again, UDPipe Modeling is a  natural language processing toolkit that provides language-agnostic 'tokenization', 'parts of speech tagging', 'lemmatization' and 'dependency parsing' of raw text. Next to text parsing, the package also allows you to train annotation models based on data. We use Udpipe to annotate the text in our headlines and save our rdata into an rdata file. We then comment out our file save, and udpipe_annotate functions so we don't actually overwrite our annotated rdata. We then put our annotated data into individual data tables.
+
+### [6.2] Extract And Display Frequencies For Universal Parts Of Speech
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- txt_freq(x_fake$upos)
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ freq, data = stats_fake, col = "yellow",
+         main = "UPOS (Universal Parts of Speech)\n frequency of occurrence for fake news",
+         xlab = "Freq")
+
+stats_real <- txt_freq(x_real$upos)
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ freq, data = stats_real, col = "yellow",
+         main = "UPOS (Universal Parts of Speech)\n frequency of occurrence for real news",
+         xlab = "Freq")
+
+stats_google <- txt_freq(x_google$upos)
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ freq, data = stats_google, col = "yellow",
+         main = "UPOS (Universal Parts of Speech)\n frequency of occurrence for google news",
+         xlab = "Freq")
+```
+
+Above we extract and display frequencies for universal parts of speech (upos) in text. We can see from the graphs above how frequent parts of speech like nouns, adjectives, etc. are in our individual headlines data tables. For our real and fake news headlines we can see that proper nouns, nouns, and punctuation are the most commonly used types of speech in our headlines. And for our google news proper nouns, nouns, and adposition are the most commonly used types of speech in our headlines. So small differences with our provided headlines upos and our google news headlines upos. We also want to note that in our fake and real headlines the frequency for each part of our upos are the same except the DET and the AUX are flipped in the amount they frequently appear. We may want to explore this later on. 
+
+### [6.3] Extract And Display Most Occurring Nouns
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- subset(x_fake, upos %in% c("NOUN"))#breaking comment
+stats_fake <- txt_freq(stats_fake$token)
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ freq, data = head(stats_fake, 20), col = "cadetblue",
+         main = "Most occurring nouns for fake news", xlab = "Freq")
+
+stats_real <- subset(x_real, upos %in% c("NOUN"))
+stats_real <- txt_freq(stats_real$token)
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ freq, data = head(stats_real, 20), col = "cadetblue",
+         main = "Most occurring nouns for real news", xlab = "Freq")
+
+stats_google <- subset(x_google, upos %in% c("NOUN"))
+stats_google <- txt_freq(stats_google$token)
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ freq, data = head(stats_google, 20), col = "cadetblue",
+         main = "Most occurring nouns for google news", xlab = "Freq")
+```
+
+Since nouns are one of the top 3 upos in all of our headline data tables we'll explore this further by extracting and displaying the most frequently occurring nouns. Above we are displaying the most common occurring nouns for our fake news headlines, real news headlines and google news headlines. Note that even though our nouns are the second most used upos the most frequent nouns for the real,fake, and google news are all different.We can see with our fake news headlines that the top 3 nouns are "comment" "trump" and "campaign." Meaning if those words appear in a news title it might mean that it's fake news. While our top 3 nouns for our real news headlines are "trump" "life" and "news." Meaning if those 3 words are in a news title it might be real. The top 3 nouns used in our google news headlines are "officer" "police" and "defense." It's interesting that the most frequent nouns in our fake news are words like "comment" "media" and "breaking." Meaning if those 3 words are in a news title it might be real, and current news. This may give us insight saying that when a headline says the words like "comment" "breaking" and "media" it may just be like click bait words, words that are  flashy and demand attention, trying to get you to look at the article even though the news isn't actually real. It seems like when people tend to comment on things that might mean they aren't telling the truth either. Fake news seems to use shocking words in their headlines to grab readers attention. We can explore this further later on with phrasing of words. 
+
+### [6.4] Extract And Display Most Occurring Adjectives
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- subset(x_fake, upos %in% c("ADJ"))
+stats_fake <- txt_freq(stats_fake$token)
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ freq, data = head(stats_fake, 20), col = "purple",
+         main = "Most occurring adjectives for fake news", xlab = "Freq")
+
+stats_real <- subset(x_real, upos %in% c("ADJ"))
+stats_real <- txt_freq(stats_real$token)
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ freq, data = head(stats_real, 20), col = "purple",
+         main = "Most occurring adjectives for real news", xlab = "Freq")
+
+stats_google <- subset(x_google, upos %in% c("ADJ"))
+stats_google <- txt_freq(stats_google$token)
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ freq, data = head(stats_google, 20), col = "purple",
+         main = "Most occurring adjectives for google news", xlab = "Freq")
+```
+
+Since adjectives are more frequently used in upos in all of our headline data tables we'll explore this further by extracting and displaying the most frequently occurring adjectives. Above we are displaying the most common occurring adjectives for our fake news headlines, real news headlines, and google news headlines.Note that even though our adjectives are the one of the most used upos the most frequent adjectives for the real,fake, and google news are all different. We can see with our fake news headlines that the top 3 adjectives are "Russian" "American" and "most."  Meaning if those words appear in a news title describing something it might mean that it's fake news. While our top 3 adjectives for our real news headlines are "daily" "Hillary" and "most." Meaning if those 3 words are in a news title it might be real. The top 3 adjectives used in our google news headlines are "more" "last" and "black."Meaning if those 3 words are in a news title it might be real, and current news. It's interesting that the most frequent adjectives in fake news revolve around trump while the most frequent adjectives for real news from our provided headlines are revolving around Hillary. This means that it is possible that when the media puts out a headline that is referencing trump it might be fake news and when it references hillary it's probably real. This may be due to the fact that Trump seems to make a lot of false claims in his speeches or simply because he says the words "fake news" a lot. And people tend to believe the Democrat party over the Republican party more when it comes to debate topics so this may be why Hillary is "real" news. And if something is about the BLM movement it's also probably real current event news as well. Since this is a recent common discussion topic all over the U.s. it's not surprising that we would believe it's real news coverage. We can explore this further later on with phrasing of words.
+
+### [6.5] Extract And Display Most Occurring Verbs
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- subset(x_fake, upos %in% c("VERB"))
+stats_fake <- txt_freq(stats_fake$token)
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ freq, data = head(stats_fake, 20), col = "gold",
+         main = "Most occurring verbs for fake news", xlab = "Freq")
+
+stats_real <- subset(x_real, upos %in% c("VERB"))
+stats_real <- txt_freq(stats_real$token)
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ freq, data = head(stats_real, 20), col = "gold",
+         main = "Most occurring verbs for real news", xlab = "Freq")
+
+stats_google <- subset(x_google, upos %in% c("VERB"))
+stats_google <- txt_freq(stats_google$token)
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ freq, data = head(stats_google, 20), col = "gold",
+         main = "Most occurring verbs for google news", xlab = "Freq")
+```
+
+Since verbs are more frequently used in upos in all of our headline data tables we'll explore this further by extracting and displaying the most frequently occurring verbs. Above we are displaying the most common occurring verbs for our fake news headlines, real news headlines, and google news headlines.Note that even though our verbs are the one of the most used upos the most frequent verbs for the real,fake, and google news are all almost different. We can see with our fake news headlines that the top 3 verbs are "be" "get" and "TruthFeed."  Meaning if those words appear in a news title it might mean that it's fake news. While our top 3 verbs for our real news headlines are "find" "said" and "need." Meaning if those 3 words are in a news title it might be real. The top 3 verbs used in our google news headlines are "killed" "found" and "says."Meaning if those 3 words are in a news title it might be real, and current news. It's interesting that the most frequent verbs in fake news have the verb truthfeed and get. This means that it is possible that when the media puts out a headline that is referencing the truth or someone needing to "get" something it might be fake news. While both the real and google news have said/say as a frequently used verb. Meaning that if someone "says" or "said" something in a headline it's probably true. And if something is referencing "killing" it's probably about the BLM movement it's also probably real current event news as well. Since this is a recent common discussion topic all over the U.s. it's not surprising that we would believe it's real news coverage. We can explore this further later on with phrasing of words.
+
+### [6.6] Extract And Display Most Occurring Determiner
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- subset(x_fake, upos %in% c("DET"))
+stats_fake <- txt_freq(stats_fake$token)
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ freq, data = head(stats_fake, 20), col = "orange",
+         main = "Most occurring determiners for fake news", xlab = "Freq")
+
+stats_real <- subset(x_real, upos %in% c("DET"))
+stats_real <- txt_freq(stats_real$token)
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ freq, data = head(stats_real, 20), col = "orange",
+         main = "Most occurring determiners for real news", xlab = "Freq")
+
+stats_google <- subset(x_google, upos %in% c("DET"))
+stats_google <- txt_freq(stats_google$token)
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ freq, data = head(stats_google, 20), col = "orange",
+         main = "Most occurring determiners for google news", xlab = "Freq")
+```
+Because determiners and auxiliary upos were different in frequency with our real news provided headlines and our fake news provided headlines I wanted to explore them and see why they may be different. Determiners are words that modify nouns or noun phrases and express the reference of the noun phrase in context. Above we can see that there isn't actually really a difference in determiners for the real versus fake news and it doesn't really add anything to our analysis. 
+
+### [6.7] Extract And Display Most Occurring Auxiliary
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- subset(x_fake, upos %in% c("AUX"))
+stats_fake <- txt_freq(stats_fake$token)
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ freq, data = head(stats_fake, 20), col = "red",
+         main = "Most occurring auxiliary for fake news", xlab = "Freq")
+
+stats_real <- subset(x_real, upos %in% c("AUX"))
+stats_real <- txt_freq(stats_real$token)
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ freq, data = head(stats_real, 20), col = "red",
+         main = "Most occurring auxiliary for real news", xlab = "Freq")
+
+stats_google <- subset(x_google, upos %in% c("AUX"))
+stats_google <- txt_freq(stats_google$token)
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ freq, data = head(stats_google, 20), col = "red",
+         main = "Most occurring auxiliary for google news", xlab = "Freq")
+```
+
+Because determiners and auxiliary upos were different in frequency with our real news provided headlines and our fake news provided headlines I wanted to explore them and see why they may be different. Auxiliary is a function word that accompanies the lexical verb of a verb phrase and expresses grammatical distinctions not carried by the lexical verb, such as person, number, tense, mood, aspect, voice or evidentiality. Above we can see that there isn't actually really a difference in auxiliary for the real versus fake news and it doesn't really add anything to our analysis.
+
+### [6.9] Using Rapid Automatic Keyword Extraction Algorithm To Determine Key Phrases In Headlines With Nouns & Adjectives
+
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- keywords_rake(x = x_fake, term = "lemma", group = "doc_id",
+                       relevant = x_fake$upos %in% c("NOUN", "ADJ"))
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ rake, data = head(subset(stats_fake, freq > 3), 20), col = "cyan",
+         main = "Keywords for fake news identified by RAKE",
+         xlab = "Rake")
+
+stats_real <- keywords_rake(x = x_real, term = "lemma", group = "doc_id",
+                            relevant = x_real$upos %in% c("NOUN", "ADJ"))
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ rake, data = head(subset(stats_real, freq > 3), 20), col = "cyan",
+         main = "Keywords for real news identified by RAKE",
+         xlab = "Rake")
+
+stats_google <- keywords_rake(x = x_google, term = "lemma", group = "doc_id",
+                            relevant = x_google$upos %in% c("NOUN", "ADJ"))
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ rake, data = head(subset(stats_google, freq > 3), 20), col = "cyan",
+         main = "Keywords for google news identified by RAKE",
+         xlab = "Rake")
+```
+
+Using the Rapid Automatic Keyword Extraction algorithm of RAKE we are able to determine keywords from our headlines by analyzing the frequency of word appearance and its co-occurrence with other words in the headlines. Meaning we can find phrases that are commonly used together in our headline data tables. Above we focused on keywords that used nouns and adjectives and explored that. In our fake news headlines the top 3 keywords are "para para dinle" "para kazanmak" and "global warming." So if a headline has those specific keywords in them, or are in another language they are more likely to be fake American news. For our real news headlines the top three keywords are "human rights" "daily wire" and "top." So if a headline has the keywords human rights, top story, or  daily wire it's probably real news. The top 3 keywords for our google news are "police officer" "traffic stop" and "police." Meaning if a headline has these keywords relating to the police it's probably real news as well. 
+
+### [6.10] Using Rapid Automatic Keyword Extraction Algorithm To Determine Key Phrases In Headlines With Nouns & Verbs
+
+```{r warning=FALSE, message=FALSE}
+stats_fake <- keywords_rake(x = x_fake, term = "lemma", group = "doc_id",
+                            relevant = x_fake$upos %in% c("NOUN", "VERB"))
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ rake, data = head(subset(stats_fake, freq > 3), 20), col = "green",
+         main = "Keywords for fake news identified by RAKE",
+         xlab = "Rake")
+
+stats_real <- keywords_rake(x = x_real, term = "lemma", group = "doc_id",
+                            relevant = x_real$upos %in% c("NOUN", "VERB"))
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ rake, data = head(subset(stats_real, freq > 3), 20), col = "green",
+         main = "Keywords for real news identified by RAKE",
+         xlab = "Rake")
+
+stats_google <- keywords_rake(x = x_google, term = "lemma", group = "doc_id",
+                              relevant = x_google$upos %in% c("NOUN", "VERB"))
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ rake, data = head(subset(stats_google, freq > 3), 20), col = "green",
+         main = "Keywords for google news identified by RAKE",
+         xlab = "Rake")
+```
+
+ Above we focused on keywords that used nouns and verbs and explored that. In our fake news headlines the top 3 keywords are "para para dinle" "para kazanmak" and "pipeline protestor." So if a headline has those specific keywords in them, or are in another language they are more likely to be fake American news. For our real news headlines the top three keywords are "campaign" "missile" and "trump." So if a headline has the keywords campaign, missle, or trump it's probably real news. This is probably due to the presidential campaigns when trump was running. The top 3 keywords for our google news are "police" "traffic stop" and "officer." Meaning if a headline has the keywords relating to the police it's probably real news as well. 
+ 
+### [6.11] Extract Top Phrases That Are Keyword-Topics
+
+```{r warning=FALSE, message=FALSE}
+x_fake$phrase_tag <- as_phrasemachine(x_fake$upos, type = "upos")
+stats_fake <- keywords_phrases(x = x_fake$phrase_tag, term = tolower(x_fake$token),
+                          pattern = "(A|N)*N(P+D*(A|N)*N)*",
+                          is_regex = TRUE, detailed = FALSE)
+stats_fake <- subset(stats_fake, ngram > 1 & freq > 3)
+stats_fake$key <- factor(stats_fake$key, levels = rev(stats_fake$key))
+barchart(key ~ freq, data = head(stats_fake, 20), col = "magenta",
+         main = "Keywords - simple noun phrases for fake news", xlab = "Frequency")
+
+
+x_real$phrase_tag <- as_phrasemachine(x_real$upos, type = "upos")
+stats_real <- keywords_phrases(x = x_real$phrase_tag, term = tolower(x_real$token),
+                               pattern = "(A|N)*N(P+D*(A|N)*N)*",
+                               is_regex = TRUE, detailed = FALSE)
+stats_real<- subset(stats_real, ngram > 1 & freq > 3)
+stats_real$key <- factor(stats_real$key, levels = rev(stats_real$key))
+barchart(key ~ freq, data = head(stats_real, 20), col = "magenta",
+         main = "Keywords - simple noun phrases for real news", xlab = "Frequency")
+
+x_google$phrase_tag <- as_phrasemachine(x_google$upos, type = "upos")
+stats_google <- keywords_phrases(x = x_google$phrase_tag, term = tolower(x_google$token),
+                               pattern = "(A|N)*N(P+D*(A|N)*N)*",
+                               is_regex = TRUE, detailed = FALSE)
+stats_google<- subset(stats_google, ngram > 1 & freq > 3)
+stats_google$key <- factor(stats_google$key, levels = rev(stats_google$key))
+barchart(key ~ freq, data = head(stats_google, 20), col = "magenta",
+         main = "Keywords - simple noun phrases for google news", xlab = "Frequency")
+```
+
+In english a phrase is a small group of words standing together as a conceptual unit, typically forming a component of a clause. A phrase can simply be formed by using just a simple noun and verb and can give big context as to what our headlines are saying or the emotions they are trying to invoke. Key phrases can be useful to determining what's clickbait/ fake news and what's real. Above our graph shows keyword phrases using simple noun phrases for our fake,real, and google news. For our fake news it shows that "hillary clinton" "donald trump" and "world war" are all fake news phrases that should give us caution when looking at news headlines. Using simple noun phrases for our real news it shows that  "hillary clinton" "donald trump" and "le gorafi" are all real news phrases that should may indicate it is a real news headlines. Because both the real and fake news phrases for hilary and trump are frequently used in both fake and real news we should read further into the headlines when looking for real news. For our current event google news we can see that "daunte wright" "derek chauvin" and "george floyd" are our top keyword phrases for our current event news. Meaning if you see an article recently with one of those headlines it's probably real.
+
+### [6.12] Patterns To Get Focus Topic Areas For Fake News
+
+```{r warning=FALSE, message=FALSE}
+stats_fake<-keywords_collocation(x = x_fake, term = "token", group = c("doc_id", "paragraph_id", "sentence_id"), ngram_max = 4)
+
+stats_fake <-cooccurrence(x = subset(x_fake, upos %in% c("NOUN", "ADJ")), term = "lemma", group = c("doc_id", "paragraph_id", "sentence_id"))
+
+stats_fake <-cooccurrence(x = x_fake$lemma, relevant = x_fake$upos %in% c("NOUN", "ADJ"))
+stats_fake <-cooccurrence(x = x_fake$lemma, relevant = x_fake$upos %in% c("NOUN", "ADJ"), skipgram = 2)
+
+head(data.frame(stats_fake)) 
+```
+
+In order to see what words appear next to each other we'll want to look at just nouns and adjectives in order to explore the patterns in our headlines to get focus topic areas. First we'll find the collocation identification to find words that follow one another. Then we'll see how frequently the words occur in the same sentence looking at our nouns and adjectives. And find out how frequently do words follow one another even if we would skip 2 words in between. Above we look at patterns to get focus topic areas for fake news. We can see that the word chart is followed by the word day and commonly occur together/ follow one another 37 times. Looking at our chart we can see that some topic areas for fake news are email investigation (probably referring to Hillary's email investigation), daily contrarian which is a news outlet, and standin rock which is an Indian reservation that had pipeline protests. We can assume that we want to avoid reading these topics when looking at news headlines because it's probably fake news.
+
+### [6.13] Patterns To Get Focus Topic Areas For Real News
+
+```{r warning=FALSE, message=FALSE}
+stats_real<-keywords_collocation(x = x_real, term = "token", group = c("doc_id", "paragraph_id", "sentence_id"), ngram_max = 4)
+
+stats_real <-cooccurrence(x = subset(x_real, upos %in% c("NOUN", "ADJ")), term = "lemma", group = c("doc_id", "paragraph_id", "sentence_id"))
+
+stats_real <-cooccurrence(x = x_real$lemma, relevant = x_real$upos %in% c("NOUN", "ADJ"))
+stats_real <-cooccurrence(x = x_real$lemma, relevant = x_real$upos %in% c("NOUN", "ADJ"), skipgram = 2)
+
+head(data.frame(stats_real)) 
+```
+
+Above we look at patterns to get focus topic areas for real news. We can see that the word daily is followed by the word wire and commonly occur together/ follow one another 6 times. Looking at our chart we can see that some topic areas for real news are email investigation (probably referring to Hillary's email investigation), daily wire which is a news outlet, human rights, crime family, trump supporter and polling place which is probably referring to the election. We can assume that we want to consider these topics as real news when looking at news headlines.
+ 
+### [6.14] Patterns To Get Focus Topic Areas For Google News
+
+```{r warning=FALSE, message=FALSE}
+stats_google<-keywords_collocation(x = x_google, term = "token", group = c("doc_id", "paragraph_id", "sentence_id"), ngram_max = 4)
+
+stats_google <-cooccurrence(x = subset(x_google, upos %in% c("NOUN", "ADJ")), term = "lemma", group = c("doc_id", "paragraph_id", "sentence_id"))
+
+stats_google <-cooccurrence(x = x_google$lemma, relevant = x_google$upos %in% c("NOUN", "ADJ"))
+stats_google <-cooccurrence(x = x_google$lemma, relevant = x_google$upos %in% c("NOUN", "ADJ"), skipgram = 2)
+
+head(data.frame(stats_google)) 
+```
+
+Above we look at patterns to get focus topic areas for our google news. We can see that the word police is followed by the word officer and commonly occur together/ follow one another 5 times. Looking at our chart we can see that some topic areas for our google news are police officer (probably referring to the Floyd investigation of the police officers who shot him), traffice stop, black man, suspect dead (also probably referring to Floydd), FE Young blood . We can assume that we want to consider these topics as real current event news when looking at news headlines.
+
+### [6.14] Plotting Patterns Of Focus Topic Areas 
+
+```{r warning=FALSE, message=FALSE}
+wordnetwork_fake <-head(stats_fake, 25)
+wordnetwork_fake <-graph_from_data_frame(wordnetwork_fake)
+ggraph(wordnetwork_fake, layout = "fr") + geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "red")+
+  geom_node_text(aes(label = name), col = "darkgreen", size = 4) +theme_graph(base_family = "Arial Narrow") +
+  theme(legend.position = "none") +labs(title = "Co-occurrences in fake news within 3 words distance", subtitle = "Nouns & Adjectives") 
+
+wordnetwork_real <-head(stats_real, 25)
+wordnetwork_real <-graph_from_data_frame(wordnetwork_real)
+ggraph(wordnetwork_real, layout = "fr") + geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "red")+
+  geom_node_text(aes(label = name), col = "darkgreen", size = 4) +theme_graph(base_family = "Arial Narrow") +
+  theme(legend.position = "none") +labs(title = "Co-occurrences in real news within 3 words distance", subtitle = "Nouns & Adjectives") 
+
+wordnetwork_google <-head(stats_google, 25)
+wordnetwork_google <-graph_from_data_frame(wordnetwork_google)
+ggraph(wordnetwork_google, layout = "fr") + geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "red")+
+  geom_node_text(aes(label = name), col = "darkgreen", size = 4) +theme_graph(base_family = "Arial Narrow") +
+  theme(legend.position = "none") +labs(title = "Co-occurrences in google news within 3 words distance", subtitle = "Nouns & Adjectives") 
+```
+
+Creating a graph that plots patterns of focus topic areas we can see co-ocurrences of words that are in 3 words distance of each other. Meaning that these are commonly used words that are used within the max of a 3 words distance. In the graph above the words that are commonly used together are clustered together and united by a red highlight mark. The darker the mark the more frequently the words are used together so the higher their co-occurence. For our fake news the words daily contrarian and read are used together along with chart and say signifying that these are common phrases used frequently in fake news. In our real news daily wire and wikileak email investigation are used together meaning that they are frequently used together signifying that if there is a news headline about wikileaks investigation it's probably real. And in our google news we see police officer and traffic stop are used commonly and frequently together telling us that if these are current event topics used commonly.
